@@ -82,7 +82,7 @@ The interval between any two adjacent semitones is the irrational frequency mult
 ### 2. Spectral Decomposition (Discrete Fourier Transform)
 To translate continuous ambient air pressure $x(t)$ captured by the microphone into distinct frequency components, the continuous signal is sampled at $f_s = 44,100\text{ Hz}$ and windowed through an $N = 2048$ point **Fast Fourier Transform (FFT)**:
 
-$$X[k] = \sum_{n=0}^{N-1} x[n] \cdot w[n] \cdot e^{-i \frac{2\pi}{N} k n}, \quad k \in \{0, 1, \dots, N-1\}$$
+$$X[k] = \sum_{n=0}^{N-1} x[n] \cdot w[n] \cdot e^{-i \frac{2\pi}{N} k n}, \quad k \in \lbrace 0, 1, \dots, N-1 \rbrace$$
 
 where $w[n]$ is a **Hann window** applied to suppress spectral leakage:
 
@@ -95,7 +95,7 @@ $$\Delta f = \frac{f_s}{N} = \frac{44100\text{ Hz}}{2048} \approx 21.533\text{ H
 ### 3. Psychoacoustics & Critical Band Partitioning
 Human auditory perception is not linear; our cochlea perceives pitch on a logarithmic scale (the Bark scale). VibeField maps the continuous spectrum into **10 logarithmic frequency bands** across the musical range ($40\text{ Hz}$ to $12,000\text{ Hz}$):
 
-$$f_{\text{edge}}(i) = f_{\min} \cdot \left(\frac{f_{\max}}{f_{\min}}\right)^{\frac{i}{10}}, \quad i \in \{0, 1, \dots, 10\}$$
+$$f_{\text{edge}}(i) = f_{\min} \cdot \left(\frac{f_{\max}}{f_{\min}}\right)^{\frac{i}{10}}, \quad i \in \lbrace 0, 1, \dots, 10 \rbrace$$
 
 $$\text{Band}_0: 40\text{--}72\text{ Hz} \quad (\text{Sub-Bass / Kick Fundamental})$$
 $$\text{Band}_1: 72\text{--}130\text{ Hz} \quad (\text{Bass / Low End})$$
@@ -128,9 +128,11 @@ When beats are detected, inter-onset intervals (IOI) are collected into a median
 ### 5. Pitch Chroma & Circle of Fifths Torus
 To extract the melodic and harmonic identity of the audio, all spectral bins are folded modulo 12 into a 12-dimensional **Chroma Vector** $\mathbf{C} = [C_0, C_1, \dots, C_{11}]^T$:
 
-$$C_p = \sum_{k \in \mathcal{K}_p} |X[k]|^2, \quad p \in \{0 = \text{C}, 1 = \text{C}\sharp, \dots, 11 = \text{B}\}$$
+$$C_p = \sum_{k \in \mathcal{K}_p} |X[k]|^2, \quad p \in \lbrace 0 = \text{C}, 1 = \text{C}\sharp, \dots, 11 = \text{B} \rbrace$$
 
-$$\mathcal{K}_p = \left\{ k \;\middle|\; \text{round}\left(12 \log_2\left(\frac{k \cdot \Delta f}{440}\right) + 69\right) \equiv p \pmod{12} \right\}$$
+$$
+\mathcal{K}_p = \left\lbrace k \mid \text{round}\left(12 \log_2\left(\frac{k \cdot \Delta f}{440}\right) + 69\right) \equiv p \pmod{12} \right\rbrace
+$$
 
 Western musical harmony is cyclic: moving by musical fifths ($+7$ semitones) maps chromatic notes onto the **Circle of Fifths**:
 
@@ -144,7 +146,7 @@ To determine the root key and tonality (Major vs Minor), the real-time chroma ve
 $$\mathbf{T}_{\text{major}} = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]$$
 $$\mathbf{T}_{\text{minor}} = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]$$
 
-The Pearson correlation coefficient $r(p, \text{mode})$ is computed for each circular shift $p \in \{0, \dots, 11\}$:
+The Pearson correlation coefficient $r(p, \text{mode})$ is computed for each circular shift $p \in \lbrace 0, \dots, 11 \rbrace$:
 
 $$r(p, \text{mode}) = \frac{\sum_{i=0}^{11} (C_{(i-p)\bmod 12} - \bar{C})(T_{\text{mode}, i} - \bar{T}_{\text{mode}})}{\sqrt{\sum (C_i - \bar{C})^2 \sum (T_{\text{mode}, i} - \bar{T}_{\text{mode}})^2}}$$
 
