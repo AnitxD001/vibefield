@@ -1,8 +1,10 @@
 import { MoodState, PresetId, UserSettings } from '../types';
-import { PeerBridge } from '../network/PeerBridge';
+import { TVBluetoothLauncher } from '../network/TVBluetoothLauncher';
 
 export interface PhoneRemoteCallbacks {
-  onConnect: (pin: string) => Promise<boolean>;
+  onConnectBluetooth: () => Promise<boolean>;
+  onConnectCast: () => Promise<boolean>;
+  onConnectPin?: (pin: string) => Promise<boolean>;
   onDisconnect: () => void;
   onSettingsChange: (settings: Partial<UserSettings>) => void;
   onToggleSource: (mode: 'mic' | 'demo') => void;
@@ -13,24 +15,23 @@ export class PhoneRemoteView {
   private el: HTMLElement;
   private callbacks: PhoneRemoteCallbacks;
   private settings: UserSettings;
-  private pinInputs: HTMLInputElement[] = [];
   private isConnected: boolean = false;
-  private currentPin: string = '';
+  private connectedTvName: string = 'Smart TV';
 
   // DOM elements
   private pairingSection!: HTMLElement;
   private remoteSection!: HTMLElement;
-  private statusBadge!: HTMLElement;
   private spectrumContainer!: HTMLElement;
   private bpmBadge!: HTMLElement;
-  private energyFill!: HTMLElement;
   private keyBadge!: HTMLElement;
   private latencyBadge!: HTMLElement;
+  private statusTvName!: HTMLElement;
+  private pairingStatusMsg!: HTMLElement;
 
-  constructor(settings: UserSettings, callbacks: PhoneRemoteCallbacks, initialPin?: string) {
+  constructor(settings: UserSettings, callbacks: PhoneRemoteCallbacks, initialConnected: boolean = false) {
     this.settings = { ...settings };
     this.callbacks = callbacks;
-    this.currentPin = initialPin || '';
+    this.isConnected = initialConnected;
 
     this.el = document.createElement('div');
     this.el.className = 'phone-remote-container';
@@ -38,40 +39,42 @@ export class PhoneRemoteView {
       <div class="phone-remote-header">
         <div class="phone-remote-brand">
           <span class="phone-remote-dot"></span>
-          <span>VibeField Remote</span>
+          <span>VibeField Phone Controller</span>
         </div>
         <button class="phone-exit-btn" id="btnExitRemote" title="Exit to Solo Mode">✕</button>
       </div>
 
-      <!-- PAIRING SCREEN -->
+      <!-- 100% USER-SIDE / PHONE-INITIATED PAIRING SCREEN -->
       <div class="phone-pairing-panel" id="phonePairingPanel">
-        <div class="phone-pairing-icon">📺</div>
+        <div class="phone-bt-hero-badge">
+          <span class="bt-glyph">ᛒ</span>
+          <span>Bluetooth & Wireless TV Auto-Launch</span>
+        </div>
         <h2 class="phone-pairing-title">Connect to TV</h2>
         <p class="phone-pairing-desc">
-          Enter the 4-digit PIN displayed on your TV screen to start streaming live room music & controlling the display.
+          Connect completely from your phone. Tapping below prompts your phone to pair via Bluetooth with your TV and automatically opens the visualizer on your TV screen.
+          <br/><strong style="color: #38bdf8;">Zero interaction needed on your TV.</strong>
         </p>
 
-        <div class="phone-pin-inputs">
-          <input type="tel" maxlength="1" class="pin-digit-input" data-index="0" inputmode="numeric" />
-          <input type="tel" maxlength="1" class="pin-digit-input" data-index="1" inputmode="numeric" />
-          <input type="tel" maxlength="1" class="pin-digit-input" data-index="2" inputmode="numeric" />
-          <input type="tel" maxlength="1" class="pin-digit-input" data-index="3" inputmode="numeric" />
-        </div>
+        <div class="phone-bt-card">
+          <button class="phone-connect-btn phone-bt-primary" id="btnConnectBt">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+            <span>Connect to TV via Bluetooth</span>
+          </button>
 
-        <button class="phone-connect-btn" id="btnConnectTv">
-          <span>Connect to TV</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-
-        <div class="phone-cast-option" id="castOptionWrapper" style="display: none;">
-          <div class="phone-divider"><span>OR</span></div>
-          <button class="phone-cast-btn" id="btnCastScreen">
+          <button class="phone-cast-btn" id="btnConnectCast" style="margin-top: 12px;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>
-            <span>Cast to Nearby Android TV / Chromecast</span>
+            <span>Wireless Screen / Google Cast Launcher</span>
           </button>
         </div>
 
-        <div class="phone-pairing-error" id="pairingError" style="display: none;"></div>
+        <div class="phone-pairing-status" id="phonePairingStatus" style="display: none;"></div>
+
+        <div class="phone-features-checklist">
+          <div><span class="check-icon">✓</span> 100% Phone-initiated (Nothing from TV side)</div>
+          <div><span class="check-icon">✓</span> Phone mic captures live room music</div>
+          <div><span class="check-icon">✓</span> TV automatically wakes up in 4K fluid mode</div>
+        </div>
       </div>
 
       <!-- CONNECTED REMOTE CONTROLLER -->
@@ -81,8 +84,8 @@ export class PhoneRemoteView {
           <div class="remote-status-left">
             <span class="live-pulse"></span>
             <div>
-              <div class="remote-tv-name">TV Screen Linked</div>
-              <div class="remote-latency" id="remoteLatency">Latency: &lt;10ms</div>
+              <div class="remote-tv-name" id="remoteTvName">Linked to Smart TV</div>
+              <div class="remote-latency" id="remoteLatency">Bluetooth Linked • 60Hz Telemetry</div>
             </div>
           </div>
           <button class="remote-disconnect-btn" id="btnDisconnect">Disconnect</button>
@@ -91,8 +94,8 @@ export class PhoneRemoteView {
         <!-- Audio Producer Status -->
         <div class="remote-card audio-status-card">
           <div class="card-title">
-            <span>🎤 Live Room Audio</span>
-            <span class="audio-source-badge" id="audioSourceBadge">Microphone</span>
+            <span>🎤 Phone Room Microphone</span>
+            <span class="audio-source-badge" id="audioSourceBadge">Live Listening</span>
           </div>
           
           <div class="remote-spectrum-strip" id="remoteSpectrum">
@@ -123,9 +126,9 @@ export class PhoneRemoteView {
 
         <!-- Remote Controls -->
         <div class="remote-card">
-          <div class="card-title">Visual Presets</div>
+          <div class="card-title">Visual Presets (TV Screen Updates Instantly)</div>
           <div class="preset-pill-grid">
-            <button class="preset-pill" data-preset="auto">Auto Mood</button>
+            <button class="preset-pill active" data-preset="auto">Auto Mood</button>
             <button class="preset-pill" data-preset="ink">1. Ink</button>
             <button class="preset-pill" data-preset="lava">2. Lava</button>
             <button class="preset-pill" data-preset="aurora">3. Aurora</button>
@@ -137,7 +140,7 @@ export class PhoneRemoteView {
         <!-- Color Temperature Range -->
         <div class="remote-card">
           <div class="card-title">
-            <span>Color Temperature</span>
+            <span>Color Temperature Filter</span>
             <span class="temp-val" id="tempValText">Neutral</span>
           </div>
           <div class="quick-temp-row">
@@ -170,78 +173,48 @@ export class PhoneRemoteView {
     this.initDOMElements();
     this.bindEvents();
 
-    if (initialPin && initialPin.length === 4) {
-      this.setPin(initialPin);
-      this.attemptConnect(initialPin);
+    if (this.isConnected) {
+      this.setConnectedState(true);
     }
   }
 
   private initDOMElements(): void {
     this.pairingSection = this.el.querySelector('#phonePairingPanel') as HTMLElement;
     this.remoteSection = this.el.querySelector('#phoneActivePanel') as HTMLElement;
-    this.pinInputs = Array.from(this.el.querySelectorAll('.pin-digit-input'));
     this.spectrumContainer = this.el.querySelector('#remoteSpectrum') as HTMLElement;
     this.bpmBadge = this.el.querySelector('#remoteBpm') as HTMLElement;
     this.keyBadge = this.el.querySelector('#remoteKey') as HTMLElement;
     this.latencyBadge = this.el.querySelector('#remoteLatency') as HTMLElement;
-
-    // Check Presentation API support
-    const castOption = this.el.querySelector('#castOptionWrapper') as HTMLElement;
-    if (PeerBridge.isPresentationSupported() && castOption) {
-      castOption.style.display = 'block';
-    }
+    this.statusTvName = this.el.querySelector('#remoteTvName') as HTMLElement;
+    this.pairingStatusMsg = this.el.querySelector('#phonePairingStatus') as HTMLElement;
   }
 
   private bindEvents(): void {
-    // PIN Digit Auto-forward
-    this.pinInputs.forEach((input, index) => {
-      input.addEventListener('input', (e) => {
-        const val = input.value;
-        if (val.length >= 1) {
-          input.value = val[val.length - 1]; // take single digit
-          if (index < this.pinInputs.length - 1) {
-            this.pinInputs[index + 1].focus();
-          }
+    // 1. Bluetooth Connect Button (100% Phone Side)
+    const btnConnectBt = this.el.querySelector('#btnConnectBt');
+    btnConnectBt?.addEventListener('click', async () => {
+      this.showStatus('Prompting Bluetooth pairing on phone...', 'info');
+      try {
+        const ok = await this.callbacks.onConnectBluetooth();
+        if (ok) {
+          this.setConnectedState(true);
         }
-        this.checkAutoSubmit();
-      });
-
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !input.value && index > 0) {
-          this.pinInputs[index - 1].focus();
-        }
-      });
-
-      // Handle paste
-      input.addEventListener('paste', (e) => {
-        e.preventDefault();
-        const pasted = e.clipboardData?.getData('text').trim() || '';
-        if (pasted.length === 4 && /^\d+$/.test(pasted)) {
-          this.setPin(pasted);
-          this.checkAutoSubmit();
-        }
-      });
-    });
-
-    // Connect button
-    const btnConnect = this.el.querySelector('#btnConnectTv');
-    btnConnect?.addEventListener('click', () => {
-      const pin = this.getEnteredPin();
-      if (pin.length === 4) {
-        this.attemptConnect(pin);
-      } else {
-        this.showError('Please enter all 4 digits of the PIN displayed on your TV.');
+      } catch (err: any) {
+        this.showStatus(err.message || 'Bluetooth connection failed', 'error');
       }
     });
 
-    // Cast button
-    const btnCast = this.el.querySelector('#btnCastScreen');
-    btnCast?.addEventListener('click', async () => {
+    // 2. Cast / Wireless Display Button
+    const btnConnectCast = this.el.querySelector('#btnConnectCast');
+    btnConnectCast?.addEventListener('click', async () => {
+      this.showStatus('Prompting Wireless TV screen selector...', 'info');
       try {
-        const pin = this.getEnteredPin();
-        await PeerBridge.requestCast(pin.length === 4 ? pin : undefined);
+        const ok = await this.callbacks.onConnectCast();
+        if (ok) {
+          this.setConnectedState(true);
+        }
       } catch (err: any) {
-        this.showError(err.message || 'Cast failed');
+        this.showStatus(err.message || 'Wireless launch failed', 'error');
       }
     });
 
@@ -345,7 +318,7 @@ export class PhoneRemoteView {
     btnMic?.addEventListener('click', () => {
       btnMic.classList.add('active');
       btnDemo.classList.remove('active');
-      sourceBadge.textContent = 'Microphone';
+      sourceBadge.textContent = 'Live Listening';
       this.callbacks.onToggleSource('mic');
     });
 
@@ -357,51 +330,15 @@ export class PhoneRemoteView {
     });
   }
 
-  private setPin(pin: string): void {
-    const chars = pin.split('');
-    this.pinInputs.forEach((input, i) => {
-      input.value = chars[i] || '';
-    });
-  }
-
-  private getEnteredPin(): string {
-    return this.pinInputs.map((i) => i.value).join('');
-  }
-
-  private checkAutoSubmit(): void {
-    const pin = this.getEnteredPin();
-    if (pin.length === 4) {
-      this.attemptConnect(pin);
-    }
-  }
-
-  private async attemptConnect(pin: string): Promise<void> {
-    const btnConnect = this.el.querySelector('#btnConnectTv') as HTMLButtonElement;
-    if (btnConnect) {
-      btnConnect.disabled = true;
-      btnConnect.innerHTML = `<span class="tv-spinner-small"></span> Connecting...`;
-    }
-    this.hideError();
-
-    const ok = await this.callbacks.onConnect(pin);
-    if (btnConnect) {
-      btnConnect.disabled = false;
-      btnConnect.innerHTML = `<span>Connect to TV</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
-    }
-
-    if (ok) {
-      this.currentPin = pin;
-      this.setConnectedState(true);
-    } else {
-      this.showError('Unable to connect to TV. Make sure the 4-digit PIN matches the TV screen.');
-    }
-  }
-
-  public setConnectedState(connected: boolean): void {
+  public setConnectedState(connected: boolean, tvName: string = 'Smart TV'): void {
     this.isConnected = connected;
+    this.connectedTvName = tvName;
     if (connected) {
       this.pairingSection.style.display = 'none';
       this.remoteSection.style.display = 'block';
+      if (this.statusTvName) {
+        this.statusTvName.textContent = `Linked to ${tvName}`;
+      }
     } else {
       this.pairingSection.style.display = 'block';
       this.remoteSection.style.display = 'none';
@@ -418,7 +355,7 @@ export class PhoneRemoteView {
       this.keyBadge.textContent = mood.pitchInfo ? `${mood.pitchInfo.pitchName} (${Math.round(mood.harmonicLiquid?.dominantHue ?? 0)}°)` : '--';
     }
     if (this.latencyBadge) {
-      this.latencyBadge.textContent = `Latency: ${latencyMs}ms`;
+      this.latencyBadge.textContent = `Latency: ${latencyMs}ms • 60Hz Telemetry`;
     }
 
     // Update 10-band spectrum bars
@@ -433,18 +370,11 @@ export class PhoneRemoteView {
     }
   }
 
-  private showError(msg: string): void {
-    const errBox = this.el.querySelector('#pairingError') as HTMLElement;
-    if (errBox) {
-      errBox.textContent = msg;
-      errBox.style.display = 'block';
-    }
-  }
-
-  private hideError(): void {
-    const errBox = this.el.querySelector('#pairingError') as HTMLElement;
-    if (errBox) {
-      errBox.style.display = 'none';
+  public showStatus(msg: string, type: 'info' | 'success' | 'error' = 'info'): void {
+    if (this.pairingStatusMsg) {
+      this.pairingStatusMsg.textContent = msg;
+      this.pairingStatusMsg.style.display = 'block';
+      this.pairingStatusMsg.className = `phone-pairing-status status-${type}`;
     }
   }
 

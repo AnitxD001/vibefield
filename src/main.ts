@@ -11,6 +11,7 @@ import { DebugOverlay } from './ui/DebugOverlay';
 import { MediaCapture } from './ui/MediaCapture';
 import { SmartLightBroadcaster } from './network/SmartLightBroadcaster';
 import { PeerBridge } from './network/PeerBridge';
+import { TVBluetoothLauncher } from './network/TVBluetoothLauncher';
 import { TVPairingScreen } from './ui/TVPairingScreen';
 import { PhoneRemoteView } from './ui/PhoneRemoteView';
 import { MoodState, UserSettings, AudioDeviceOption, PresetId, SpectrumBandInfo, AppOperatingMode } from './types';
@@ -45,9 +46,10 @@ class VibeFieldApp {
   private mediaCapture!: MediaCapture;
   private smartLights!: SmartLightBroadcaster;
 
-  // Dual-Screen TV & Phone Network Bridge
+  // Dual-Screen TV & Phone Network Bridge (100% Phone-Initiated Bluetooth Launcher)
   private operatingMode: AppOperatingMode = 'standalone';
   private peerBridge: PeerBridge = new PeerBridge();
+  private bluetoothLauncher: TVBluetoothLauncher = new TVBluetoothLauncher();
   private tvPairingScreen: TVPairingScreen | null = null;
   private phoneRemoteView: PhoneRemoteView | null = null;
   private remoteMood: MoodState | null = null;
@@ -178,10 +180,17 @@ class VibeFieldApp {
     await this.initRenderer();
     this.handleResize();
 
-    // Start background ambient demo synth as resilient fallback so TV fluid is active
+    // Start background ambient demo synth as resilient fallback so TV fluid is active immediately
     await this.audioEngine.initialize(this.settings.selectedDeviceId, 'dynamic');
 
-    this.tvPairingScreen = new TVPairingScreen();
+    const params = new URLSearchParams(window.location.search);
+    const isAutoFromPhone = params.get('autostart') === '1' || params.get('source') === 'phone_bt';
+
+    if (!isAutoFromPhone) {
+      this.tvPairingScreen = new TVPairingScreen();
+    } else {
+      this.notifications.show('TV Connected via Phone Bluetooth • Native 4K Fluid Running', 4000, 'success');
+    }
 
     await this.peerBridge.initTV({
       onPinReady: (pin) => {
@@ -225,21 +234,38 @@ class VibeFieldApp {
     this.phoneRemoteView = new PhoneRemoteView(
       this.settings,
       {
-        onConnect: async (pin: string) => {
-          return await this.peerBridge.connectToTV(pin, {
-            onConnected: () => {
-              this.notifications.show(`Connected to TV [ PIN: ${pin} ]`, 3000, 'success');
+        onConnectBluetooth: async () => {
+          return await this.bluetoothLauncher.connectAndLaunchTV({
+            onStatus: (msg, type) => {
+              this.notifications.show(msg, 3000, type || 'info');
+              this.phoneRemoteView?.showStatus(msg, type);
+            },
+            onLaunched: (tvName) => {
+              this.phoneRemoteView?.setConnectedState(true, tvName);
+              this.notifications.show(`TV Active: ${tvName}! Streaming room microphone.`, 4500, 'success');
+            },
+            onError: (err) => {
+              this.notifications.show(err, 4000, 'error');
+              this.phoneRemoteView?.showStatus(err, 'error');
+            },
+          });
+        },
+        onConnectCast: async () => {
+          return await this.bluetoothLauncher.connectAndLaunchTV({
+            onStatus: (msg, type) => {
+              this.notifications.show(msg, 3000, type || 'info');
+              this.phoneRemoteView?.showStatus(msg, type);
+            },
+            onLaunched: (tvName) => {
+              this.phoneRemoteView?.setConnectedState(true, tvName);
             },
             onError: (err) => {
               this.notifications.show(err, 4000, 'error');
             },
-            onDisconnected: () => {
-              this.notifications.show('Disconnected from TV', 2500, 'info');
-              this.phoneRemoteView?.setConnectedState(false);
-            },
           });
         },
         onDisconnect: () => {
+          this.bluetoothLauncher.disconnect();
           this.peerBridge.destroy();
           this.notifications.show('Disconnected from TV', 2000, 'info');
         },
@@ -247,6 +273,7 @@ class VibeFieldApp {
           this.settings = { ...this.settings, ...newSettings };
           this.saveSettings();
           this.peerBridge.sendSettings(newSettings);
+          this.bluetoothLauncher.sendToTV({ type: 'UPDATE_SETTINGS', settings: newSettings });
         },
         onToggleSource: (mode) => {
           if (mode === 'mic') {
@@ -258,8 +285,7 @@ class VibeFieldApp {
         onExitToSolo: () => {
           window.location.href = window.location.pathname;
         },
-      },
-      initialPin
+      }
     );
 
     // 60Hz Telemetry Stream from Phone Microphone to TV
@@ -269,6 +295,9 @@ class VibeFieldApp {
       if (mood) {
         if (this.peerBridge.isConnected()) {
           this.peerBridge.sendMoodTick(mood);
+        }
+        if (this.bluetoothLauncher.getIsConnected()) {
+          this.bluetoothLauncher.sendToTV({ type: 'MOOD_TICK', data: mood });
         }
         this.phoneRemoteView?.updateLiveTelemetry(mood, this.peerBridge.getLatency());
       }

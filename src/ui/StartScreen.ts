@@ -37,21 +37,16 @@ export class StartScreen {
             </svg>
           </button>
 
-          <div class="dual-screen-actions">
-            <button class="start-sub-button" id="btnPhoneRemote">
-              <span class="sub-icon">📱</span>
-              <div class="sub-text">
-                <span class="sub-title">Connect to TV</span>
-                <span class="sub-desc">Phone as Room Mic & Remote</span>
+          <div class="phone-tv-action-card">
+            <button class="phone-tv-bt-btn" id="btnPhoneRemote">
+              <div class="bt-action-left">
+                <span class="bt-icon-circle">ᛒ</span>
+                <div class="sub-text">
+                  <span class="sub-title">Connect to TV via Bluetooth</span>
+                  <span class="sub-desc">100% Phone-Initiated • Auto-opens on TV • Zero TV setup</span>
+                </div>
               </div>
-            </button>
-
-            <button class="start-sub-button" id="btnTvReceiver">
-              <span class="sub-icon">📺</span>
-              <div class="sub-text">
-                <span class="sub-title">Display on TV</span>
-                <span class="sub-desc">4-Digit PIN (No TV Typing)</span>
-              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
           </div>
         </div>
@@ -79,12 +74,6 @@ export class StartScreen {
     phoneRemoteBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.dismiss('phone');
-    });
-
-    const tvReceiverBtn = this.el.querySelector('#btnTvReceiver');
-    tvReceiverBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.dismiss('tv');
     });
 
     // Pressing Space or Enter starts solo mode

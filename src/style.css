@@ -1472,3 +1472,134 @@ input[type="range"]::-webkit-slider-thumb:hover {
   font-size: 11px;
   color: #38bdf8;
 }
+
+/* =========================================
+   100% Phone-Initiated Bluetooth TV Styles
+   ========================================= */
+
+.phone-tv-action-card {
+  width: 100%;
+}
+
+.phone-tv-bt-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(99, 102, 241, 0.16));
+  border: 1.5px solid rgba(56, 189, 248, 0.35);
+  border-radius: 16px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
+}
+
+.phone-tv-bt-btn:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(99, 102, 241, 0.28));
+  border-color: rgba(56, 189, 248, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(56, 189, 248, 0.25);
+}
+
+.bt-action-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bt-icon-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+}
+
+.phone-bt-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-bottom: 16px;
+}
+
+.bt-glyph {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.phone-bt-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 20px 16px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.phone-connect-btn.phone-bt-primary {
+  background: linear-gradient(135deg, #0284c7, #3b82f6, #6366f1);
+  padding: 16px;
+  font-size: 16px;
+  box-shadow: 0 12px 30px rgba(2, 132, 199, 0.35);
+}
+
+.phone-features-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 16px;
+  text-align: left;
+  padding: 0 8px;
+}
+
+.check-icon {
+  color: #4ade80;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.phone-pairing-status {
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.phone-pairing-status.status-info {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+}
+
+.phone-pairing-status.status-success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.phone-pairing-status.status-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
