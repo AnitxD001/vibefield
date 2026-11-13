@@ -316,17 +316,6 @@ VibeField transmits **only mathematical telemetry** (`MoodState` JSON payloads, 
 VibeField is deployed to GitHub Pages under the user **AnitxD001**:  
 🌐 **[https://anitxd001.github.io/vibefield/](https://anitxd001.github.io/vibefield/)**
 
-### Step-by-Step GitHub Pages Activation:
-
-1. Open your repository's Pages settings:  
-   👉 **[https://github.com/AnitxD001/vibefield/settings/pages](https://github.com/AnitxD001/vibefield/settings/pages)**
-2. Under **Build and deployment** $\rightarrow$ **Source**:
-   - Select **Deploy from a branch**.
-   - Under **Branch**, choose **`gh-pages`** and folder **`/(root)`**, then click **Save**.
-   - *(Alternatively, choose branch `main` and folder `/docs`, or choose **GitHub Actions**)*.
-3. Your free HTTPS site will be live at:  
-   **`https://anitxd001.github.io/vibefield/`**
-
 ---
 
 ## 💻 Local Development & Building
