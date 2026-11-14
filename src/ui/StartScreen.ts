@@ -2,6 +2,7 @@ export interface StartScreenCallbacks {
   onStartSolo: () => void;
   onStartPhoneRemote: () => void;
   onStartTVReceiver: () => void;
+  onStartScreenBeam?: () => void;
 }
 
 export class StartScreen {
@@ -14,6 +15,7 @@ export class StartScreen {
         onStartSolo: callbacksOrFn,
         onStartPhoneRemote: () => {},
         onStartTVReceiver: () => {},
+        onStartScreenBeam: () => {},
       };
     } else {
       this.callbacks = callbacksOrFn;
@@ -23,7 +25,7 @@ export class StartScreen {
     this.el.className = 'start-screen';
     this.el.innerHTML = `
       <div class="start-content">
-        <div class="start-badge">Living HDR Navier-Stokes Color Field</div>
+        <div class="start-badge">Living HDR Navier-Stokes Color Field • v5.0</div>
         <h1 class="start-title">VibeField</h1>
         <p class="start-desc">
           Turns your screen into a living fluid color field dancing in real time to your music.
@@ -37,18 +39,30 @@ export class StartScreen {
             </svg>
           </button>
 
-          <div class="phone-tv-action-card">
-            <button class="phone-tv-bt-btn" id="btnPhoneRemote">
-              <div class="bt-action-left">
-                <span class="bt-icon-circle">ᛒ</span>
-                <div class="sub-text">
-                  <span class="sub-title">Connect to TV via Bluetooth</span>
-                  <span class="sub-desc">100% Phone-Initiated • Auto-opens on TV • Zero TV setup</span>
-                </div>
+          <div class="dual-screen-action-row">
+            <button class="start-card-button" id="btnPhoneRemote">
+              <div class="card-icon-pill">📱</div>
+              <div class="card-text">
+                <span class="card-title">Phone Controller</span>
+                <span class="card-desc">Scan TV QR, enter PIN, or Beam</span>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+
+            <button class="start-card-button" id="btnTvReceiver">
+              <div class="card-icon-pill">📺</div>
+              <div class="card-text">
+                <span class="card-title">TV Display Receiver</span>
+                <span class="card-desc">4K Big Screen with QR & PIN</span>
               </div>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
           </div>
+
+          <button class="start-beam-button" id="btnBeamScreen">
+            <span class="beam-icon">📡</span>
+            <span>1-Tap Wireless Screen Beam (AirPlay / Cast / Smart View)</span>
+          </button>
         </div>
 
         <div class="start-tips">
@@ -76,6 +90,18 @@ export class StartScreen {
       this.dismiss('phone');
     });
 
+    const tvReceiverBtn = this.el.querySelector('#btnTvReceiver');
+    tvReceiverBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dismiss('tv');
+    });
+
+    const beamBtn = this.el.querySelector('#btnBeamScreen');
+    beamBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dismiss('beam');
+    });
+
     // Pressing Space or Enter starts solo mode
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key === ' ' || e.key === 'Enter') {
@@ -86,20 +112,25 @@ export class StartScreen {
     window.addEventListener('keydown', keyHandler);
   }
 
-  private dismiss(mode: 'solo' | 'phone' | 'tv'): void {
+  private dismiss(mode: 'solo' | 'phone' | 'tv' | 'beam'): void {
     this.el.classList.add('start-fade-out');
     setTimeout(() => {
       if (this.el.parentElement) {
         this.el.parentElement.removeChild(this.el);
       }
-    }, 600);
-
-    if (mode === 'solo') {
-      this.callbacks.onStartSolo();
-    } else if (mode === 'phone') {
-      this.callbacks.onStartPhoneRemote();
-    } else if (mode === 'tv') {
-      this.callbacks.onStartTVReceiver();
-    }
+      if (mode === 'solo') {
+        this.callbacks.onStartSolo();
+      } else if (mode === 'phone') {
+        this.callbacks.onStartPhoneRemote();
+      } else if (mode === 'tv') {
+        this.callbacks.onStartTVReceiver();
+      } else if (mode === 'beam') {
+        if (this.callbacks.onStartScreenBeam) {
+          this.callbacks.onStartScreenBeam();
+        } else {
+          this.callbacks.onStartSolo();
+        }
+      }
+    }, 400);
   }
 }

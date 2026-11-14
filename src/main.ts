@@ -11,7 +11,7 @@ import { DebugOverlay } from './ui/DebugOverlay';
 import { MediaCapture } from './ui/MediaCapture';
 import { SmartLightBroadcaster } from './network/SmartLightBroadcaster';
 import { PeerBridge } from './network/PeerBridge';
-import { TVBluetoothLauncher } from './network/TVBluetoothLauncher';
+import { TVConnectionHub } from './network/TVConnectionHub';
 import { TVPairingScreen } from './ui/TVPairingScreen';
 import { PhoneRemoteView } from './ui/PhoneRemoteView';
 import { MoodState, UserSettings, AudioDeviceOption, PresetId, SpectrumBandInfo, AppOperatingMode } from './types';
@@ -46,10 +46,10 @@ class VibeFieldApp {
   private mediaCapture!: MediaCapture;
   private smartLights!: SmartLightBroadcaster;
 
-  // Dual-Screen TV & Phone Network Bridge (100% Phone-Initiated Bluetooth Launcher)
+  // Dual-Screen TV & Phone Network Bridge (VibeField v5.0 Unified Smart TV Hub)
   private operatingMode: AppOperatingMode = 'standalone';
   private peerBridge: PeerBridge = new PeerBridge();
-  private bluetoothLauncher: TVBluetoothLauncher = new TVBluetoothLauncher();
+  private tvHub: TVConnectionHub = new TVConnectionHub();
   private tvPairingScreen: TVPairingScreen | null = null;
   private phoneRemoteView: PhoneRemoteView | null = null;
   private remoteMood: MoodState | null = null;
@@ -168,6 +168,14 @@ class VibeFieldApp {
         onStartSolo: () => this.start(),
         onStartPhoneRemote: () => this.startPhoneRemote(),
         onStartTVReceiver: () => this.startTVReceiver(),
+        onStartScreenBeam: async () => {
+          await this.start();
+          await this.tvHub.beamDisplayToTV({
+            onStatus: (msg, type) => this.notifications.show(msg, 3000, type),
+            onConnected: () => this.notifications.show('Wireless Screen Beam Active in 4K!', 4000, 'success'),
+            onEnded: () => this.notifications.show('Screen Beam ended', 2000, 'info'),
+          });
+        },
       });
     }
   }
@@ -189,7 +197,7 @@ class VibeFieldApp {
     if (!isAutoFromPhone) {
       this.tvPairingScreen = new TVPairingScreen();
     } else {
-      this.notifications.show('TV Connected via Phone Bluetooth • Native 4K Fluid Running', 4000, 'success');
+      this.notifications.show('TV Connected via Wireless Display • Native 4K Fluid Running', 4000, 'success');
     }
 
     await this.peerBridge.initTV({
@@ -234,15 +242,15 @@ class VibeFieldApp {
     this.phoneRemoteView = new PhoneRemoteView(
       this.settings,
       {
-        onConnectBluetooth: async () => {
-          return await this.bluetoothLauncher.connectAndLaunchTV({
-            onStatus: (msg, type) => {
-              this.notifications.show(msg, 3000, type || 'info');
-              this.phoneRemoteView?.showStatus(msg, type);
+        onConnectPin: async (pin: string) => {
+          return await this.peerBridge.connectToTV(pin, {
+            onConnected: () => {
+              this.notifications.show(`Connected to TV [ PIN: ${pin} ]`, 3000, 'success');
+              this.phoneRemoteView?.setConnectedState(true, `TV [${pin}]`);
             },
-            onLaunched: (tvName) => {
-              this.phoneRemoteView?.setConnectedState(true, tvName);
-              this.notifications.show(`TV Active: ${tvName}! Streaming room microphone.`, 4500, 'success');
+            onDisconnected: () => {
+              this.notifications.show('Disconnected from TV', 2500, 'info');
+              this.phoneRemoteView?.setConnectedState(false);
             },
             onError: (err) => {
               this.notifications.show(err, 4000, 'error');
@@ -250,22 +258,40 @@ class VibeFieldApp {
             },
           });
         },
-        onConnectCast: async () => {
-          return await this.bluetoothLauncher.connectAndLaunchTV({
+        onBeamDisplay: async () => {
+          return await this.tvHub.beamDisplayToTV({
             onStatus: (msg, type) => {
               this.notifications.show(msg, 3000, type || 'info');
               this.phoneRemoteView?.showStatus(msg, type);
             },
-            onLaunched: (tvName) => {
-              this.phoneRemoteView?.setConnectedState(true, tvName);
+            onConnected: () => {
+              this.phoneRemoteView?.setConnectedState(true, 'Wireless TV Display');
+              this.notifications.show('Wireless Display Active! Beaming screen in 4K.', 4000, 'success');
+            },
+            onEnded: () => {
+              this.phoneRemoteView?.setConnectedState(false);
+              this.notifications.show('Screen beam session ended', 2500, 'info');
+            },
+          });
+        },
+        onScanBluetooth: async () => {
+          return await this.tvHub.scanBluetoothTV({
+            onStatus: (msg, type) => {
+              this.notifications.show(msg, 3000, type || 'info');
+              this.phoneRemoteView?.showStatus(msg, type);
+            },
+            onDeviceSelected: (deviceName) => {
+              this.notifications.show(`Bluetooth paired: ${deviceName}`, 4000, 'success');
+              this.phoneRemoteView?.showStatus(`Paired with ${deviceName}. Now beam screen or enter PIN to display!`, 'success');
             },
             onError: (err) => {
               this.notifications.show(err, 4000, 'error');
+              this.phoneRemoteView?.showStatus(err, 'error');
             },
           });
         },
         onDisconnect: () => {
-          this.bluetoothLauncher.disconnect();
+          this.tvHub.disconnect();
           this.peerBridge.destroy();
           this.notifications.show('Disconnected from TV', 2000, 'info');
         },
@@ -273,7 +299,6 @@ class VibeFieldApp {
           this.settings = { ...this.settings, ...newSettings };
           this.saveSettings();
           this.peerBridge.sendSettings(newSettings);
-          this.bluetoothLauncher.sendToTV({ type: 'UPDATE_SETTINGS', settings: newSettings });
         },
         onToggleSource: (mode) => {
           if (mode === 'mic') {
@@ -285,7 +310,8 @@ class VibeFieldApp {
         onExitToSolo: () => {
           window.location.href = window.location.pathname;
         },
-      }
+      },
+      initialPin
     );
 
     // 60Hz Telemetry Stream from Phone Microphone to TV
@@ -295,9 +321,6 @@ class VibeFieldApp {
       if (mood) {
         if (this.peerBridge.isConnected()) {
           this.peerBridge.sendMoodTick(mood);
-        }
-        if (this.bluetoothLauncher.getIsConnected()) {
-          this.bluetoothLauncher.sendToTV({ type: 'MOOD_TICK', data: mood });
         }
         this.phoneRemoteView?.updateLiveTelemetry(mood, this.peerBridge.getLatency());
       }

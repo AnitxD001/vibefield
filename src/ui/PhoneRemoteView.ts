@@ -1,10 +1,10 @@
 import { MoodState, PresetId, UserSettings } from '../types';
-import { TVBluetoothLauncher } from '../network/TVBluetoothLauncher';
+import { TVConnectionHub, PlatformDiagnostics } from '../network/TVConnectionHub';
 
 export interface PhoneRemoteCallbacks {
-  onConnectBluetooth: () => Promise<boolean>;
-  onConnectCast: () => Promise<boolean>;
-  onConnectPin?: (pin: string) => Promise<boolean>;
+  onConnectPin: (pin: string) => Promise<boolean>;
+  onBeamDisplay: () => Promise<boolean>;
+  onScanBluetooth: () => Promise<boolean>;
   onDisconnect: () => void;
   onSettingsChange: (settings: Partial<UserSettings>) => void;
   onToggleSource: (mode: 'mic' | 'demo') => void;
@@ -16,7 +16,9 @@ export class PhoneRemoteView {
   private callbacks: PhoneRemoteCallbacks;
   private settings: UserSettings;
   private isConnected: boolean = false;
+  private currentPin: string = '';
   private connectedTvName: string = 'Smart TV';
+  private pinInputs: HTMLInputElement[] = [];
 
   // DOM elements
   private pairingSection!: HTMLElement;
@@ -28,10 +30,17 @@ export class PhoneRemoteView {
   private statusTvName!: HTMLElement;
   private pairingStatusMsg!: HTMLElement;
 
-  constructor(settings: UserSettings, callbacks: PhoneRemoteCallbacks, initialConnected: boolean = false) {
+  constructor(
+    settings: UserSettings,
+    callbacks: PhoneRemoteCallbacks,
+    initialPin?: string
+  ) {
     this.settings = { ...settings };
     this.callbacks = callbacks;
-    this.isConnected = initialConnected;
+    this.currentPin = initialPin || '';
+
+    const hub = new TVConnectionHub();
+    const diag = hub.getDiagnostics();
 
     this.el = document.createElement('div');
     this.el.className = 'phone-remote-container';
@@ -39,42 +48,81 @@ export class PhoneRemoteView {
       <div class="phone-remote-header">
         <div class="phone-remote-brand">
           <span class="phone-remote-dot"></span>
-          <span>VibeField Phone Controller</span>
+          <span>VibeField Phone Controller • v5.0</span>
         </div>
         <button class="phone-exit-btn" id="btnExitRemote" title="Exit to Solo Mode">✕</button>
       </div>
 
-      <!-- 100% USER-SIDE / PHONE-INITIATED PAIRING SCREEN -->
+      <!-- PAIRING SCREEN -->
       <div class="phone-pairing-panel" id="phonePairingPanel">
         <div class="phone-bt-hero-badge">
-          <span class="bt-glyph">ᛒ</span>
-          <span>Bluetooth & Wireless TV Auto-Launch</span>
+          <span class="bt-glyph">📺</span>
+          <span>Smart TV Connection Hub</span>
         </div>
-        <h2 class="phone-pairing-title">Connect to TV</h2>
+        <h2 class="phone-pairing-title">Connect to Your TV</h2>
         <p class="phone-pairing-desc">
-          Connect completely from your phone. Tapping below prompts your phone to pair via Bluetooth with your TV and automatically opens the visualizer on your TV screen.
-          <br/><strong style="color: #38bdf8;">Zero interaction needed on your TV.</strong>
+          Zero TV typing required. Open VibeField on your TV (or scan the TV screen), enter the 4-digit PIN, or beam your screen wirelessly.
         </p>
 
-        <div class="phone-bt-card">
-          <button class="phone-connect-btn phone-bt-primary" id="btnConnectBt">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
-            <span>Connect to TV via Bluetooth</span>
-          </button>
+        <!-- METHOD 1: 4-DIGIT TV PIN & QR CODE PAIRING -->
+        <div class="pairing-method-card">
+          <div class="method-card-header">
+            <span class="method-badge">Recommended</span>
+            <span class="method-title">🔗 Enter 4-Digit TV PIN</span>
+          </div>
+          <p class="method-sub">Check your TV screen for the 4-digit code (or point your phone camera at the TV QR code):</p>
+          
+          <div class="phone-pin-inputs" id="phonePinInputs">
+            <input type="tel" maxlength="1" class="pin-digit-input" data-index="0" placeholder="·" />
+            <input type="tel" maxlength="1" class="pin-digit-input" data-index="1" placeholder="·" />
+            <input type="tel" maxlength="1" class="pin-digit-input" data-index="2" placeholder="·" />
+            <input type="tel" maxlength="1" class="pin-digit-input" data-index="3" placeholder="·" />
+          </div>
 
-          <button class="phone-cast-btn" id="btnConnectCast" style="margin-top: 12px;">
+          <button class="phone-connect-btn" id="btnConnectTvPin">
+            <span>Connect to TV</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <!-- METHOD 2: 1-TAP WIRELESS SCREEN BEAM -->
+        <div class="pairing-method-card">
+          <div class="method-card-header">
+            <span class="method-badge alt">Direct Cast</span>
+            <span class="method-title">📡 1-Tap Wireless Screen Beam</span>
+          </div>
+          <p class="method-sub">Mirrors the fluid visualizer directly onto your AirPlay, Chromecast, or Smart View TV:</p>
+
+          <button class="phone-beam-btn" id="btnBeamDisplay">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>
-            <span>Wireless Screen / Google Cast Launcher</span>
+            <span>Beam Screen to TV</span>
+          </button>
+
+          <div class="platform-native-hint">
+            ${diag.isIOS
+              ? '<strong>iOS Tip:</strong> Swipe down Control Center ➔ Tap <strong>Screen Mirroring</strong> 📺 ➔ Select TV'
+              : diag.isAndroid
+              ? '<strong>Android Tip:</strong> Swipe down Quick Settings ➔ Tap <strong>Smart View / Cast</strong> 📺'
+              : '<strong>Tip:</strong> You can also use Chrome Menu ➔ <strong>Cast...</strong> to beam this tab'}
+          </div>
+        </div>
+
+        <!-- METHOD 3: BLUETOOTH SCANNER -->
+        <div class="pairing-method-card">
+          <div class="method-card-header">
+            <span class="method-badge subtle">Bluetooth</span>
+            <span class="method-title">ᛒ Bluetooth Peripheral Scanner</span>
+          </div>
+          <p class="method-sub">Scan for nearby Bluetooth Low Energy displays or audio sinks:</p>
+
+          <button class="phone-bt-btn-secondary" id="btnScanBt">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+            <span>Scan for Bluetooth TV</span>
           </button>
         </div>
 
+        <!-- STATUS FEEDBACK -->
         <div class="phone-pairing-status" id="phonePairingStatus" style="display: none;"></div>
-
-        <div class="phone-features-checklist">
-          <div><span class="check-icon">✓</span> 100% Phone-initiated (Nothing from TV side)</div>
-          <div><span class="check-icon">✓</span> Phone mic captures live room music</div>
-          <div><span class="check-icon">✓</span> TV automatically wakes up in 4K fluid mode</div>
-        </div>
       </div>
 
       <!-- CONNECTED REMOTE CONTROLLER -->
@@ -84,8 +132,8 @@ export class PhoneRemoteView {
           <div class="remote-status-left">
             <span class="live-pulse"></span>
             <div>
-              <div class="remote-tv-name" id="remoteTvName">Linked to Smart TV</div>
-              <div class="remote-latency" id="remoteLatency">Bluetooth Linked • 60Hz Telemetry</div>
+              <div class="remote-tv-name" id="remoteTvName">Linked to TV</div>
+              <div class="remote-latency" id="remoteLatency">DataChannel Live • 60Hz Telemetry</div>
             </div>
           </div>
           <button class="remote-disconnect-btn" id="btnDisconnect">Disconnect</button>
@@ -99,7 +147,6 @@ export class PhoneRemoteView {
           </div>
           
           <div class="remote-spectrum-strip" id="remoteSpectrum">
-            <!-- 10 dynamic bars -->
             <div class="spec-bar"></div>
             <div class="spec-bar"></div>
             <div class="spec-bar"></div>
@@ -124,9 +171,9 @@ export class PhoneRemoteView {
           </div>
         </div>
 
-        <!-- Remote Controls -->
+        <!-- Visual Presets -->
         <div class="remote-card">
-          <div class="card-title">Visual Presets (TV Screen Updates Instantly)</div>
+          <div class="card-title">Visual Presets (TV Updates Instantly)</div>
           <div class="preset-pill-grid">
             <button class="preset-pill active" data-preset="auto">Auto Mood</button>
             <button class="preset-pill" data-preset="ink">1. Ink</button>
@@ -158,27 +205,21 @@ export class PhoneRemoteView {
             <span class="temp-val" id="sensValText">1.0x</span>
           </div>
           <input type="range" min="0.2" max="3.0" step="0.1" value="1.0" class="remote-slider" id="sliderSensitivity" />
+        </div>
 
-          <div class="card-title" style="margin-top: 16px;">
+        <div class="remote-card">
+          <div class="card-title">
             <span>Fluid Viscosity</span>
-            <span class="temp-val" id="viscValText">Balanced</span>
+            <span class="temp-val" id="viscValText">0.15</span>
           </div>
-          <input type="range" min="-1.0" max="1.0" step="0.1" value="0.0" class="remote-slider" id="sliderViscosity" />
+          <input type="range" min="0.01" max="0.99" step="0.02" value="0.15" class="remote-slider" id="sliderViscosity" />
         </div>
       </div>
     `;
 
     document.body.appendChild(this.el);
 
-    this.initDOMElements();
-    this.bindEvents();
-
-    if (this.isConnected) {
-      this.setConnectedState(true);
-    }
-  }
-
-  private initDOMElements(): void {
+    // Cache elements
     this.pairingSection = this.el.querySelector('#phonePairingPanel') as HTMLElement;
     this.remoteSection = this.el.querySelector('#phoneActivePanel') as HTMLElement;
     this.spectrumContainer = this.el.querySelector('#remoteSpectrum') as HTMLElement;
@@ -187,147 +228,215 @@ export class PhoneRemoteView {
     this.latencyBadge = this.el.querySelector('#remoteLatency') as HTMLElement;
     this.statusTvName = this.el.querySelector('#remoteTvName') as HTMLElement;
     this.pairingStatusMsg = this.el.querySelector('#phonePairingStatus') as HTMLElement;
+
+    this.bindEvents();
+
+    // If an initial PIN was provided (e.g. from QR code scan), auto-populate and connect!
+    if (initialPin && initialPin.length === 4) {
+      this.populatePin(initialPin);
+      setTimeout(() => {
+        this.attemptConnect(initialPin);
+      }, 300);
+    }
   }
 
   private bindEvents(): void {
-    // 1. Bluetooth Connect Button (100% Phone Side)
-    const btnConnectBt = this.el.querySelector('#btnConnectBt');
-    btnConnectBt?.addEventListener('click', async () => {
-      this.showStatus('Prompting Bluetooth pairing on phone...', 'info');
-      try {
-        const ok = await this.callbacks.onConnectBluetooth();
-        if (ok) {
-          this.setConnectedState(true);
-        }
-      } catch (err: any) {
-        this.showStatus(err.message || 'Bluetooth connection failed', 'error');
-      }
-    });
-
-    // 2. Cast / Wireless Display Button
-    const btnConnectCast = this.el.querySelector('#btnConnectCast');
-    btnConnectCast?.addEventListener('click', async () => {
-      this.showStatus('Prompting Wireless TV screen selector...', 'info');
-      try {
-        const ok = await this.callbacks.onConnectCast();
-        if (ok) {
-          this.setConnectedState(true);
-        }
-      } catch (err: any) {
-        this.showStatus(err.message || 'Wireless launch failed', 'error');
-      }
-    });
-
-    // Exit to solo
-    const btnExit = this.el.querySelector('#btnExitRemote');
-    btnExit?.addEventListener('click', () => {
+    // Exit button
+    this.el.querySelector('#btnExitRemote')?.addEventListener('click', () => {
       this.callbacks.onExitToSolo();
     });
 
-    // Disconnect
+    // 4-Digit PIN inputs
+    this.pinInputs = Array.from(this.el.querySelectorAll('.pin-digit-input')) as HTMLInputElement[];
+    this.pinInputs.forEach((input, index) => {
+      input.addEventListener('input', (e: any) => {
+        const val = input.value.replace(/[^0-9]/g, '');
+        input.value = val.slice(-1);
+
+        if (input.value && index < this.pinInputs.length - 1) {
+          this.pinInputs[index + 1].focus();
+        }
+
+        this.checkAutoSubmit();
+      });
+
+      input.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Backspace' && !input.value && index > 0) {
+          this.pinInputs[index - 1].focus();
+        }
+      });
+
+      input.addEventListener('paste', (e: ClipboardEvent) => {
+        e.preventDefault();
+        const pasted = e.clipboardData?.getData('text') || '';
+        const digits = pasted.replace(/[^0-9]/g, '').slice(0, 4);
+        this.populatePin(digits);
+        this.checkAutoSubmit();
+      });
+    });
+
+    // Connect PIN button
+    const btnConnectPin = this.el.querySelector('#btnConnectTvPin');
+    btnConnectPin?.addEventListener('click', () => {
+      const pin = this.getEnteredPin();
+      if (pin.length === 4) {
+        this.attemptConnect(pin);
+      } else {
+        this.showStatus('Please enter all 4 digits displayed on your TV screen.', 'error');
+      }
+    });
+
+    // Beam display button
+    const btnBeam = this.el.querySelector('#btnBeamDisplay');
+    btnBeam?.addEventListener('click', async () => {
+      this.showStatus('Requesting wireless display beam...', 'info');
+      await this.callbacks.onBeamDisplay();
+    });
+
+    // Scan Bluetooth button
+    const btnScanBt = this.el.querySelector('#btnScanBt');
+    btnScanBt?.addEventListener('click', async () => {
+      this.showStatus('Starting Bluetooth scan...', 'info');
+      await this.callbacks.onScanBluetooth();
+    });
+
+    // Disconnect button
     const btnDisconnect = this.el.querySelector('#btnDisconnect');
     btnDisconnect?.addEventListener('click', () => {
       this.callbacks.onDisconnect();
       this.setConnectedState(false);
     });
 
-    // Presets
-    const presetPills = this.el.querySelectorAll('.preset-pill');
-    presetPills.forEach((pill) => {
+    // Preset pills
+    const pills = this.el.querySelectorAll('.preset-pill');
+    pills.forEach((pill) => {
       pill.addEventListener('click', () => {
-        const pId = pill.getAttribute('data-preset') as PresetId;
-        presetPills.forEach((p) => p.classList.remove('active'));
+        pills.forEach((p) => p.classList.remove('active'));
         pill.classList.add('active');
-        this.settings.activePreset = pId;
-        this.callbacks.onSettingsChange({ activePreset: pId });
+        const preset = (pill as HTMLElement).dataset.preset as PresetId;
+        this.callbacks.onSettingsChange({ activePreset: preset });
       });
     });
 
-    // Color Temperature Slider
-    const tempSlider = this.el.querySelector('#sliderColorTemp') as HTMLInputElement;
+    // Color Temperature Filter
+    const sliderTemp = this.el.querySelector('#sliderColorTemp') as HTMLInputElement;
     const tempText = this.el.querySelector('#tempValText') as HTMLElement;
-    const btnCool = this.el.querySelector('#btnTempCool') as HTMLElement;
-    const btnNeutral = this.el.querySelector('#btnTempNeutral') as HTMLElement;
-    const btnWarm = this.el.querySelector('#btnTempWarm') as HTMLElement;
+    const btnCool = this.el.querySelector('#btnTempCool') as HTMLButtonElement;
+    const btnNeutral = this.el.querySelector('#btnTempNeutral') as HTMLButtonElement;
+    const btnWarm = this.el.querySelector('#btnTempWarm') as HTMLButtonElement;
 
     const updateTempUI = (val: number) => {
-      tempSlider.value = val.toString();
-      if (val <= -0.15) {
-        tempText.textContent = `Cool (${Math.round(val * 100)}%)`;
-        btnCool.classList.add('active');
-        btnNeutral.classList.remove('active');
-        btnWarm.classList.remove('active');
-      } else if (val >= 0.15) {
-        tempText.textContent = `Warm (+${Math.round(val * 100)}%)`;
-        btnCool.classList.remove('active');
-        btnNeutral.classList.remove('active');
-        btnWarm.classList.add('active');
-      } else {
-        tempText.textContent = 'Neutral';
-        btnCool.classList.remove('active');
-        btnNeutral.classList.add('active');
-        btnWarm.classList.remove('active');
+      if (tempText) {
+        if (Math.abs(val) < 0.05) tempText.textContent = 'Neutral';
+        else if (val < 0) tempText.textContent = `Cool (${Math.round(val * 100)}%)`;
+        else tempText.textContent = `Warm (+${Math.round(val * 100)}%)`;
       }
+      [btnCool, btnNeutral, btnWarm].forEach((b) => b?.classList.remove('active'));
+      if (val < -0.3) btnCool?.classList.add('active');
+      else if (val > 0.3) btnWarm?.classList.add('active');
+      else btnNeutral?.classList.add('active');
     };
 
-    tempSlider?.addEventListener('input', () => {
-      const val = parseFloat(tempSlider.value);
+    sliderTemp?.addEventListener('input', () => {
+      const val = parseFloat(sliderTemp.value);
       updateTempUI(val);
-      this.settings.colorTempBias = val;
       this.callbacks.onSettingsChange({ colorTempBias: val });
     });
 
     btnCool?.addEventListener('click', () => {
-      updateTempUI(-0.6);
-      this.callbacks.onSettingsChange({ colorTempBias: -0.6 });
+      if (sliderTemp) sliderTemp.value = '-0.65';
+      updateTempUI(-0.65);
+      this.callbacks.onSettingsChange({ colorTempBias: -0.65 });
     });
+
     btnNeutral?.addEventListener('click', () => {
+      if (sliderTemp) sliderTemp.value = '0.0';
       updateTempUI(0.0);
       this.callbacks.onSettingsChange({ colorTempBias: 0.0 });
     });
+
     btnWarm?.addEventListener('click', () => {
-      updateTempUI(0.6);
-      this.callbacks.onSettingsChange({ colorTempBias: 0.6 });
+      if (sliderTemp) sliderTemp.value = '0.65';
+      updateTempUI(0.65);
+      this.callbacks.onSettingsChange({ colorTempBias: 0.65 });
     });
 
-    // Sensitivity Slider
-    const sensSlider = this.el.querySelector('#sliderSensitivity') as HTMLInputElement;
+    // Sensitivity slider
+    const sliderSens = this.el.querySelector('#sliderSensitivity') as HTMLInputElement;
     const sensText = this.el.querySelector('#sensValText') as HTMLElement;
-    sensSlider?.addEventListener('input', () => {
-      const val = parseFloat(sensSlider.value);
-      sensText.textContent = `${val.toFixed(1)}x`;
-      this.settings.sensitivity = val;
+    sliderSens?.addEventListener('input', () => {
+      const val = parseFloat(sliderSens.value);
+      if (sensText) sensText.textContent = `${val.toFixed(1)}x`;
       this.callbacks.onSettingsChange({ sensitivity: val });
     });
 
-    // Viscosity Slider
-    const viscSlider = this.el.querySelector('#sliderViscosity') as HTMLInputElement;
+    // Viscosity slider
+    const sliderVisc = this.el.querySelector('#sliderViscosity') as HTMLInputElement;
     const viscText = this.el.querySelector('#viscValText') as HTMLElement;
-    viscSlider?.addEventListener('input', () => {
-      const val = parseFloat(viscSlider.value);
-      viscText.textContent = val < -0.1 ? 'Fluid' : val > 0.1 ? 'Viscous' : 'Balanced';
-      this.settings.viscosityBias = val;
+    sliderVisc?.addEventListener('input', () => {
+      const val = parseFloat(sliderVisc.value);
+      if (viscText) viscText.textContent = val.toFixed(2);
       this.callbacks.onSettingsChange({ viscosityBias: val });
     });
 
-    // Audio Source Buttons
-    const btnMic = this.el.querySelector('#btnSourceMic') as HTMLElement;
-    const btnDemo = this.el.querySelector('#btnSourceDemo') as HTMLElement;
-    const sourceBadge = this.el.querySelector('#audioSourceBadge') as HTMLElement;
+    // Audio Source toggles
+    const btnMic = this.el.querySelector('#btnSourceMic');
+    const btnDemo = this.el.querySelector('#btnSourceDemo');
+    const badgeSource = this.el.querySelector('#audioSourceBadge');
 
     btnMic?.addEventListener('click', () => {
       btnMic.classList.add('active');
-      btnDemo.classList.remove('active');
-      sourceBadge.textContent = 'Live Listening';
+      btnDemo?.classList.remove('active');
+      if (badgeSource) badgeSource.textContent = 'Room Mic Live';
       this.callbacks.onToggleSource('mic');
     });
 
     btnDemo?.addEventListener('click', () => {
       btnDemo.classList.add('active');
-      btnMic.classList.remove('active');
-      sourceBadge.textContent = 'Demo Synth';
+      btnMic?.classList.remove('active');
+      if (badgeSource) badgeSource.textContent = 'Demo Synth';
       this.callbacks.onToggleSource('demo');
     });
+  }
+
+  private populatePin(pin: string): void {
+    const chars = pin.split('');
+    this.pinInputs.forEach((input, i) => {
+      input.value = chars[i] || '';
+    });
+  }
+
+  private getEnteredPin(): string {
+    return this.pinInputs.map((i) => i.value).join('');
+  }
+
+  private checkAutoSubmit(): void {
+    const pin = this.getEnteredPin();
+    if (pin.length === 4) {
+      this.attemptConnect(pin);
+    }
+  }
+
+  private async attemptConnect(pin: string): Promise<void> {
+    const btnConnect = this.el.querySelector('#btnConnectTvPin') as HTMLButtonElement;
+    if (btnConnect) {
+      btnConnect.disabled = true;
+      btnConnect.innerHTML = `<span class="tv-spinner-small"></span> Connecting to TV [${pin}]...`;
+    }
+    this.showStatus(`Establishing WebRTC bridge with TV [${pin}]...`, 'info');
+
+    const ok = await this.callbacks.onConnectPin(pin);
+    if (btnConnect) {
+      btnConnect.disabled = false;
+      btnConnect.innerHTML = `<span>Connect to TV</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+    }
+
+    if (ok) {
+      this.currentPin = pin;
+      this.setConnectedState(true, `TV [${pin}]`);
+    } else {
+      this.showStatus('Unable to reach TV. Verify the 4-digit code matches your TV screen.', 'error');
+    }
   }
 
   public setConnectedState(connected: boolean, tvName: string = 'Smart TV'): void {
@@ -345,11 +454,15 @@ export class PhoneRemoteView {
     }
   }
 
-  public updateLiveTelemetry(mood: MoodState, latencyMs: number): void {
+  public updateLiveTelemetry(mood: MoodState, latencyMs: number = 0): void {
+    this.updateMoodTelemetry(mood, latencyMs);
+  }
+
+  public updateMoodTelemetry(mood: MoodState, latencyMs: number = 0): void {
     if (!this.isConnected) return;
 
     if (this.bpmBadge) {
-      this.bpmBadge.textContent = `${Math.round(mood.bpm)} BPM`;
+      this.bpmBadge.textContent = mood.bpm > 0 ? `${Math.round(mood.bpm)}` : '--';
     }
     if (this.keyBadge) {
       this.keyBadge.textContent = mood.pitchInfo ? `${mood.pitchInfo.pitchName} (${Math.round(mood.harmonicLiquid?.dominantHue ?? 0)}°)` : '--';
@@ -360,13 +473,11 @@ export class PhoneRemoteView {
 
     // Update 10-band spectrum bars
     if (this.spectrumContainer && mood.spectrumBands) {
-      const bars = this.spectrumContainer.querySelectorAll('.spec-bar');
-      mood.spectrumBands.forEach((band, i) => {
-        if (bars[i]) {
-          const heightPct = Math.max(8, Math.min(100, Math.round(band.amplitude * 100)));
-          (bars[i] as HTMLElement).style.height = `${heightPct}%`;
-        }
-      });
+      const bars = this.spectrumContainer.children;
+      for (let i = 0; i < Math.min(bars.length, mood.spectrumBands.length); i++) {
+        const h = Math.max(8, Math.min(100, Math.round(mood.spectrumBands[i].amplitude * 100)));
+        (bars[i] as HTMLElement).style.height = `${h}%`;
+      }
     }
   }
 
