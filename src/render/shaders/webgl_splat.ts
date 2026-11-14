@@ -83,13 +83,10 @@ void main() {
     vel += tan2 * w2 * uDt * 26.0;
   }
 
-  // 4. Smooth Beat / Kick Momentum (ZERO water ripples)
+  // 4. Music Beat & Kick Turbulent Momentum (Divergence-Free, ZERO Stagnant Bubble!)
   if (uKickIntensity > 0.01) {
-    vec2 toKick = (uv - uKickCenter) * vec2(uAspectRatio, 1.0);
-    float rKick = length(toKick);
-    float kickPush = exp(-rKick * 3.5);
-    vec2 radialDir = toKick / max(0.001, rKick);
-    vel += radialDir * kickPush * uKickIntensity * 0.12;
+    vec2 kickCurl = curlNoise(uv * 3.2 + vec2(uTime * 0.25, -uTime * 0.18));
+    vel += kickCurl * uKickIntensity * uDt * 24.0;
   }
 
   // 5. Treble Sparkle

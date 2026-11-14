@@ -219,18 +219,16 @@ export class MusicMotionEngine {
     const danceFactor = 1.0 - this.floatFactor * 0.85;
     const danceMultiplier = (1.0 + this.beatDanceMomentum * 0.95 * Math.min(2.0, bpmRatio)) * danceFactor;
 
-    // 4. Roaming Multi-Vortex Migration across all 4 quadrants ("Here, There, Everywhere")
-    // In dance mode: dynamic energetic orbits in sync with musical beat phase
-    // In float mode: slow, ethereal, oceanic drift
-    const vortexOrbitSpeed = (0.30 * bpmSpeedScale * danceFactor + 0.05 * this.floatFactor);
-    const v1Phase = timeSec * vortexOrbitSpeed + this.beatPhase * 0.08 * danceFactor;
-    const v2Phase = timeSec * vortexOrbitSpeed * 1.05 + this.beatPhase * 0.06 * danceFactor + 2.8;
+    // 4. Roaming Multi-Vortex Migration across all quadrants ("Here, There, Everywhere")
+    // Non-repeating Lissajous-Brownian drift across all 4 quadrants and diagonals:
+    const v1t = timeSec * (0.28 * bpmSpeedScale * danceFactor + 0.06);
+    const v2t = timeSec * (0.22 * bpmSpeedScale * danceFactor + 0.05);
 
     // Vortex 1: Bass / Rhythm gyre (clockwise)
-    this.vortex1.x = 0.5 + Math.sin(v1Phase * 1.1 + 0.5) * (0.33 - this.floatFactor * 0.08) + Math.cos(timeSec * 0.14) * 0.06;
-    this.vortex1.y = 0.5 + Math.cos(v1Phase * 0.9 + 1.2) * (0.31 - this.floatFactor * 0.08) + Math.sin(timeSec * 0.16) * 0.06;
-    this.vortex1.x = Math.max(0.12, Math.min(0.88, this.vortex1.x));
-    this.vortex1.y = Math.max(0.12, Math.min(0.88, this.vortex1.y));
+    this.vortex1.x = 0.50 + Math.sin(v1t * 1.23 + 0.7) * 0.38 + Math.cos(v1t * 0.47 + 2.1) * 0.12;
+    this.vortex1.y = 0.50 + Math.cos(v1t * 0.89 + 1.4) * 0.36 + Math.sin(v1t * 0.61 + 0.3) * 0.12;
+    this.vortex1.x = Math.max(0.08, Math.min(0.92, this.vortex1.x));
+    this.vortex1.y = Math.max(0.08, Math.min(0.92, this.vortex1.y));
     this.vortex1.strength = (mood.midRangeSwirl * 0.85 + mood.kickIntensity * 0.70 + mood.energy * 0.35) * bpmSpeedScale * danceMultiplier;
     if (this.floatFactor > 0.4) {
       this.vortex1.strength = Math.max(0.12, this.vortex1.strength * 0.40); // gentle floating swirl, never zero
@@ -238,10 +236,10 @@ export class MusicMotionEngine {
     this.vortex1.spinSign = 1.0;
 
     // Vortex 2: Melodic / Vocal gyre (counter-clockwise)
-    this.vortex2.x = 0.5 + Math.cos(v2Phase + 0.3) * (0.33 - this.floatFactor * 0.08) + Math.sin(timeSec * 0.12) * 0.06;
-    this.vortex2.y = 0.5 + Math.sin(v2Phase * 1.15) * (0.31 - this.floatFactor * 0.08) + Math.cos(timeSec * 0.18) * 0.06;
-    this.vortex2.x = Math.max(0.12, Math.min(0.88, this.vortex2.x));
-    this.vortex2.y = Math.max(0.12, Math.min(0.88, this.vortex2.y));
+    this.vortex2.x = 0.50 + Math.cos(v2t * 1.11 + 3.2) * 0.38 + Math.sin(v2t * 0.53 + 1.1) * 0.12;
+    this.vortex2.y = 0.50 + Math.sin(v2t * 0.78 + 2.5) * 0.36 + Math.cos(v2t * 0.69 + 4.0) * 0.12;
+    this.vortex2.x = Math.max(0.08, Math.min(0.92, this.vortex2.x));
+    this.vortex2.y = Math.max(0.08, Math.min(0.92, this.vortex2.y));
     this.vortex2.strength = (mood.midRangeSwirl * 0.90 + mood.hiHatIntensity * 0.60 + mood.energy * 0.35) * bpmSpeedScale * danceMultiplier;
     if (this.floatFactor > 0.4) {
       this.vortex2.strength = Math.max(0.12, this.vortex2.strength * 0.40);
@@ -324,16 +322,14 @@ export class MusicMotionEngine {
         steeringY += (toTargetY / distTarget) * steerStrength;
       }
 
-      // C. Bass Bands: Deep momentum, reacts to kick epicenter with outward thrust
+      // C. Bass Bands: Deep momentum, propels along rhythmic forward flow (ZERO center repulsion!)
       if (isBass) {
         targetSpeed *= (1.0 + band.amplitude * 0.5);
         if (mood.isKick || mood.kickIntensity > 0.2) {
-          const dx = agent.x - this.currentKickCenter[0];
-          const dy = agent.y - this.currentKickCenter[1];
-          const dist = Math.max(0.08, Math.hypot(dx, dy));
-          const kickPush = ((mood.kickIntensity * 1.1) / dist) * danceMultiplier * (1.0 - this.floatFactor * 0.75);
-          steeringX += (dx / dist) * kickPush;
-          steeringY += (dy / dist) * kickPush;
+          const kickAngle = agent.heading + (i % 2 === 0 ? 0.6 : -0.6) + Math.sin(this.beatPhase) * 0.4;
+          const kickForce = mood.kickIntensity * 1.3 * bpmSpeedScale * danceMultiplier;
+          steeringX += Math.cos(kickAngle) * kickForce;
+          steeringY += Math.sin(kickAngle) * kickForce;
         }
       }
 
@@ -425,26 +421,27 @@ export class MusicMotionEngine {
       if (splats.length >= 24) break;
     }
 
-    // 6. Complementary Transient Burst Injection (Section 3 of Harmonic Color Theory)
+    // 6. Complementary Transient Burst Injection (Natural organic fluid infusion, ZERO rings/bubbles!)
     if (mood.harmonicLiquid && (mood.harmonicLiquid.isBurst || mood.harmonicLiquid.burstIntensity > 0.05)) {
       const bInt = mood.harmonicLiquid.burstIntensity;
       const hComp = mood.harmonicLiquid.complementaryHue;
       const compLab = oklchToOklab(0.55 + bInt * 0.12, 0.36, hComp);
-      const origin = mood.harmonicLiquid.burstOrigin || this.currentKickCenter;
-      const numBurstRays = 6;
 
-      for (let r = 0; r < numBurstRays; r++) {
-        const rayAngle = (r / numBurstRays) * Math.PI * 2 + timeSec * 2.2;
-        const rayDist = (mood.harmonicLiquid.burstRadius * 0.40) % 0.85;
+      // Infuse complementary color along active wandering agent streamlines across the canvas:
+      for (let k = 0; k < 3; k++) {
+        const targetAgent = this.agents[(k * 3 + this.beatCounter) % this.agents.length];
+        const jitterAngle = Math.random() * Math.PI * 2;
+        const jitterDist = 0.04 + Math.random() * 0.10;
+
         splats.push({
-          posX: Math.max(0.08, Math.min(0.92, origin[0] + Math.cos(rayAngle) * rayDist)),
-          posY: Math.max(0.08, Math.min(0.92, origin[1] + Math.sin(rayAngle) * rayDist)),
-          velX: Math.cos(rayAngle) * (1.8 + bInt * 2.5) * bpmSpeedScale * danceMultiplier,
-          velY: Math.sin(rayAngle) * (1.8 + bInt * 2.5) * bpmSpeedScale * danceMultiplier,
+          posX: Math.max(0.06, Math.min(0.94, targetAgent.x + Math.cos(jitterAngle) * jitterDist)),
+          posY: Math.max(0.06, Math.min(0.94, targetAgent.y + Math.sin(jitterAngle) * jitterDist)),
+          velX: targetAgent.vx * (1.6 + bInt * 2.0) * bpmSpeedScale * danceMultiplier,
+          velY: targetAgent.vy * (1.6 + bInt * 2.0) * bpmSpeedScale * danceMultiplier,
           oklab: [compLab.L, compLab.a, compLab.b],
           amplitude: bInt,
-          radius: preset.splatRadius * (1.8 + bInt * 0.8),
-          intensity: bInt * 1.25,
+          radius: preset.splatRadius * (1.5 + bInt * 0.6),
+          intensity: bInt * 1.15,
         });
       }
     }
@@ -468,43 +465,27 @@ export class MusicMotionEngine {
       });
     }
 
-    // 8. On Surge: Distribute explosive shockwaves across dynamic coordinates
+    // 8. On Surge: Distribute explosive shockwaves randomly across the entire canvas
     if (isSurge) {
       for (let s = 0; s < 8; s++) {
-        let sx: number;
-        let sy: number;
-        let shockDirX: number;
-        let shockDirY: number;
-
-        if (s < 4) {
-          const angle = (s / 4) * Math.PI * 2 + timeSec * 1.5;
-          const dist = 0.14 + (s % 2) * 0.08;
-          sx = Math.max(0.08, Math.min(0.92, this.currentKickCenter[0] + Math.cos(angle) * dist));
-          sy = Math.max(0.08, Math.min(0.92, this.currentKickCenter[1] + Math.sin(angle) * dist));
-          shockDirX = Math.cos(angle) * 2.4 * bpmSpeedScale;
-          shockDirY = Math.sin(angle) * 2.4 * bpmSpeedScale;
-        } else {
-          const cornerIdx = s - 4;
-          const cornerAngle = (cornerIdx / 4) * Math.PI * 2 + 0.785;
-          sx = Math.max(0.08, Math.min(0.92, 0.5 + Math.cos(cornerAngle) * 0.38));
-          sy = Math.max(0.08, Math.min(0.92, 0.5 + Math.sin(cornerAngle) * 0.32));
-          shockDirX = -Math.cos(cornerAngle) * 2.0 * bpmSpeedScale;
-          shockDirY = -Math.sin(cornerAngle) * 2.0 * bpmSpeedScale;
-        }
+        const sx = 0.08 + Math.random() * 0.84;
+        const sy = 0.08 + Math.random() * 0.84;
+        const surgeAngle = Math.random() * Math.PI * 2;
+        const surgeSpeed = (2.0 + Math.random() * 1.6) * bpmSpeedScale;
 
         const burstBand = bands[(s * 2) % 10] || bands[0];
         splats.push({
           posX: sx,
           posY: sy,
-          velX: shockDirX,
-          velY: shockDirY,
+          velX: Math.cos(surgeAngle) * surgeSpeed,
+          velY: Math.sin(surgeAngle) * surgeSpeed,
           oklab: [
             Math.min(1.2, burstBand.oklab[0] * 1.35),
             burstBand.oklab[1] * 1.45,
             burstBand.oklab[2] * 1.45,
           ],
           amplitude: 1.0,
-          radius: preset.splatRadius * 2.2,
+          radius: preset.splatRadius * 2.0,
           intensity: 1.0,
         });
 

@@ -114,13 +114,10 @@ fn fs_inject_velocity(in: VertexOutput) -> @location(0) vec4<f32> {
     vel += tan2 * w2 * forces.dt * 26.0;
   }
 
-  // 4. Smooth Beat / Kick Momentum (ZERO water ripples)
+  // 4. Music Beat & Kick Turbulent Momentum (Divergence-Free, ZERO Stagnant Bubble!)
   if (forces.kickIntensity > 0.01) {
-    let toKick = (uv - forces.kickCenter) * vec2<f32>(forces.aspectRatio, 1.0);
-    let rKick = length(toKick);
-    let kickPush = exp(-rKick * 3.5);
-    let radialDir = toKick / max(0.001, rKick);
-    vel += radialDir * kickPush * forces.kickIntensity * 0.12;
+    let kickCurl = curlNoise(uv * 3.2 + vec2<f32>(forces.time * 0.25, -forces.time * 0.18));
+    vel += kickCurl * forces.kickIntensity * forces.dt * 24.0;
   }
 
   // 5. Treble Sparkle (High transient micro-perturbations across screen)

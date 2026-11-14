@@ -214,10 +214,8 @@ export class HarmonicLiquidColorTheory {
       this.timeSinceLastBurst = 0.0;
       firedBurstThisFrame = true;
 
-      // Center burst with gentle organic fluid drift
-      const xJitter = Math.sin(this.wanderingAngle) * 0.10;
-      const yJitter = Math.cos(this.wanderingAngle) * 0.10;
-      this.burstOrigin = [0.5 + xJitter, 0.5 + yJitter];
+      // Completely random wandering burst origin across the canvas (ZERO center bias!)
+      this.burstOrigin = [0.12 + Math.random() * 0.76, 0.12 + Math.random() * 0.76];
     } else {
       // Exponential decay: B drops to 0.0 over time (tau ~ 0.75s for dreamy soft light dissipation)
       this.burstIntensity *= Math.exp(-clampedDt / 0.75);
